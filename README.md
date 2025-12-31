@@ -1,28 +1,34 @@
-# SAL - Claude Code Launcher CLI
+# SAL - Simple Anthropic Launcher
 
-A lightweight CLI launcher for Claude Code with MCP server management, session control, and convenience features.
+A CLI tool for launching Claude Code with selective MCP server management. SAL lets you control which MCP servers are enabled at startup while keeping all servers available for on-demand use.
+
+## Features
+
+- **Selective MCP Enabling**: Only start the MCP servers you need, reducing startup time
+- **All Servers Available**: Non-enabled servers remain available via `/mcp` in Claude Code
+- **Shortcuts**: Quick codes like `gm` for Gmail, `cal` for Calendar
+- **Profiles**: Launch groups of servers with one command (`sal google`)
+- **Session Resume**: Continue where you left off with `-r`
 
 ## Installation
 
-### Using pipx (Recommended)
+### From GitHub (Recommended)
 
 ```bash
-# Install pipx if you don't have it
-brew install pipx
-pipx ensurepath
+# Install with pipx
+pipx install git+https://github.com/treystegall/sal-cli.git
 
-# Install SAL
-cd ~/sal/sal-cli
-pipx install -e .
+# Or clone and install
+git clone https://github.com/treystegall/sal-cli.git
+cd sal-cli
+pipx install .
 ```
 
-### Using pip with virtual environment
+### From Local Directory
 
 ```bash
 cd ~/sal/sal-cli
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -e .
+pipx install -e .
 ```
 
 ### Verify Installation
@@ -31,15 +37,35 @@ pip install -e .
 sal version
 ```
 
+## Quick Start
+
+```bash
+# Launch Claude with Gmail MCP enabled
+sal -m gm
+
+# Launch with multiple MCPs
+sal -m gm,cal,at
+
+# Launch with a profile (all Google services)
+sal google
+
+# Resume last session
+sal -r
+
+# Launch with no MCPs (fastest startup)
+sal
+```
+
 ## Usage
 
 ```
 USAGE:
-  sal                       Launch Claude (no MCPs, max performance)
-  sal -m <mcp>              Launch with specific MCP(s)
+  sal                       Launch Claude (no MCPs enabled)
+  sal -m <mcp>              Launch with specific MCP(s) enabled
   sal -m gm,at              Launch with multiple MCPs
+  sal <profile>             Launch with a profile (e.g., sal google)
   sal -r, --resume          Resume last session
-  sal -l, --local           Stay in current directory (don't cd to ~/sal/desktop)
+  sal -l, --local           Stay in current directory
   sal --safe                Launch without --dangerously-skip-permissions
 
 COMMANDS:
@@ -47,9 +73,10 @@ COMMANDS:
   sal version, -v           Show version information
   sal profiles              List available MCP profiles
   sal mcp list              List all available MCPs
-  sal mcp set <profile>     Set MCP profile permanently
+  sal mcp set <profile>     Set default MCP profile
+  sal mcp kill              Kill orphaned MCP server processes
   sal prompt "<text>"       One-shot prompt execution
-  sal help, -h              Show this help
+  sal help, -h              Show help
 ```
 
 ## MCP Shortcuts
@@ -63,98 +90,157 @@ COMMANDS:
 | `doc` | Google Docs |
 | `drv` | Google Drive |
 | `gpe` | Google People |
-| `n8n` | n8n MCP |
+| `n8n` | n8n |
 | `jf` | JotForm |
 
 ## MCP Profiles
 
-| Profile | MCPs |
-|---------|------|
-| `google` | gm, cal, gsh, doc, drv, gpe |
-| `dev` | n8n, at, jf |
+| Profile | Servers |
+|---------|---------|
+| `start` | Gmail, Calendar, Airtable |
+| `google` | Gmail, Calendar, Sheets, Docs, Drive, People |
+| `dev` | n8n, Airtable, JotForm |
 | `all` | All available MCPs |
 
-## Examples
+## How It Works
+
+SAL controls MCP server enabling by modifying `~/.claude.json` before launching Claude Code:
+
+1. **All servers are configured** in `mcpServers` (making them available)
+2. **Non-enabled servers** are added to `disabledMcpServers` (won't auto-start)
+3. **Enabled servers** are removed from `disabledMcpServers` (will auto-start)
+
+This means:
+- Enabled servers start automatically when Claude launches
+- Disabled servers are still available - use `/mcp` in Claude to enable them on-demand
+
+## Configuration
+
+SAL stores its configuration in `~/.sal/`:
+
+| File | Purpose |
+|------|---------|
+| `config.json` | Main settings (default profile, working directory) |
+| `mcp.json` | MCP server definitions |
+| `shortcuts.json` | Custom shortcut overrides |
+| `profiles.json` | Custom profile definitions |
+
+### Adding MCP Servers
+
+Edit `~/.sal/mcp.json` to add your MCP servers:
+
+```json
+{
+  "mcpServers": {
+    "my-server": {
+      "type": "stdio",
+      "command": "python",
+      "args": ["/path/to/my_server.py"],
+      "env": {}
+    }
+  }
+}
+```
+
+### Custom Shortcuts
+
+Create `~/.sal/shortcuts.json`:
+
+```json
+{
+  "ms": "my-server"
+}
+```
+
+Now use `sal -m ms` to launch with your server.
+
+### Custom Profiles
+
+Create `~/.sal/profiles.json`:
+
+```json
+{
+  "work": ["gm", "cal", "at", "ms"]
+}
+```
+
+Now use `sal work` to launch with your profile.
+
+### Setting a Default Profile
 
 ```bash
-# Launch Claude with no MCPs (fastest startup)
-sal
-
-# Launch with Gmail MCP
-sal -m gm
-
-# Launch with multiple MCPs
-sal -m gm,at,n8n
-
-# Launch using a profile
-sal -m google
-# Or use the profile name directly
-sal google
-
-# Resume last session
-sal -r
-
-# Resume with specific MCPs
-sal -r -m gm
-
-# Stay in current directory instead of ~/sal/desktop
-sal -l
-
-# Launch without --dangerously-skip-permissions
-sal --safe
-
-# One-shot prompt execution
-sal prompt "What files are in this directory?"
-
-# Set a default profile
+# Set default profile
 sal mcp set google
+
+# Now just running 'sal' will use the google profile
+sal
 
 # Clear default profile
 sal mcp set none
 ```
 
-## Configuration
+## Default Behavior
 
-SAL stores configuration in `~/.sal/`:
+| Setting | Default | Override |
+|---------|---------|----------|
+| Working directory | `~/sal/desktop` | `-l` to stay local |
+| Permissions | Skip permissions prompt | `--safe` to require approval |
+| MCPs enabled | None | `-m` to specify |
 
-- `config.json` - Main settings (default profile, paths)
-- `shortcuts.json` - Custom shortcut overrides
-- `profiles.json` - Custom profile definitions
+## Examples
 
-### Default Behavior
+```bash
+# Quick Gmail access
+sal gm
 
-- **No MCPs by default**: Launches Claude with no MCP servers for maximum performance
-- **Working directory**: Changes to `~/sal/desktop` before launching (use `-l` to stay local)
-- **Permissions**: Uses `--dangerously-skip-permissions` by default (use `--safe` to disable)
+# Full Google workspace
+sal google
 
-### Custom Shortcuts
+# Development setup
+sal -m at,n8n,jf
 
-Add custom shortcuts by creating `~/.sal/shortcuts.json`:
+# Resume with specific MCPs
+sal -r -m gm,cal
 
-```json
-{
-  "myshortcut": "my-mcp-server-name"
-}
-```
+# One-shot prompt
+sal prompt "Summarize my recent emails"
 
-### Custom Profiles
-
-Add custom profiles by creating `~/.sal/profiles.json`:
-
-```json
-{
-  "myprofile": ["gm", "at", "myshortcut"]
-}
+# Stay in current project directory
+sal -l -m at
 ```
 
 ## Requirements
 
 - Python 3.10+
-- Claude Code CLI installed (`claude` command available)
-- MCP servers configured in `~/.sal/mcp.json`
+- [Claude Code](https://claude.ai/code) installed (`claude` command available)
+- [pipx](https://pypa.github.io/pipx/) for installation
+
+## Troubleshooting
+
+### MCP servers not starting
+
+1. Check server definitions in `~/.sal/mcp.json`
+2. Verify the server command/script exists and is executable
+3. Run `sal mcp list` to see available servers
+
+### Orphaned MCP processes
+
+```bash
+sal mcp kill
+```
+
+### Reset to defaults
+
+```bash
+rm -rf ~/.sal
+```
 
 ## Uninstall
 
 ```bash
 pipx uninstall sal
 ```
+
+## License
+
+MIT
