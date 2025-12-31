@@ -214,6 +214,19 @@ def should_skip_permissions() -> bool:
     return config.get("skip_permissions", True)
 
 
+def get_report_email() -> str | None:
+    """Get configured email for morning reports."""
+    config = load_config()
+    return config.get("report_email")
+
+
+def set_report_email(email: str) -> None:
+    """Set email address for morning reports."""
+    config = load_config()
+    config["report_email"] = email
+    save_config(config)
+
+
 def load_claude_config() -> dict:
     """Load the Claude Code configuration from ~/.claude.json."""
     if CLAUDE_CONFIG_FILE.exists():

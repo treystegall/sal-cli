@@ -154,3 +154,65 @@ def get_claude_version() -> str | None:
         return None
     except FileNotFoundError:
         return None
+
+
+def launch_claude_oneshot(
+    prompt: str,
+    mcps: list[str] | None = None,
+    safe_mode: bool = False,
+) -> subprocess.CompletedProcess:
+    """
+    Run Claude in one-shot mode with specified MCPs, capturing output.
+
+    Args:
+        prompt: The prompt text to send to Claude
+        mcps: List of MCP shortcuts/names to enable (e.g., ["gm", "cal"])
+        safe_mode: If True, don't use --dangerously-skip-permissions
+
+    Returns:
+        subprocess.CompletedProcess with stdout/stderr captured
+    """
+    # Get working directory
+    claude_dir = get_claude_dir()
+    claude_dir.mkdir(parents=True, exist_ok=True)
+
+    # Build MCP argument if provided
+    mcp_arg = ",".join(mcps) if mcps else None
+
+    # Build command and get enabled servers
+    cmd, enabled_servers, error = build_claude_command(
+        mcp_arg=mcp_arg,
+        resume=False,
+        safe_mode=safe_mode,
+        prompt=prompt,
+    )
+
+    if error:
+        # Return a failed result with the error message
+        return subprocess.CompletedProcess(
+            args=cmd,
+            returncode=1,
+            stdout="",
+            stderr=error,
+        )
+
+    # Configure MCPs in ~/.claude.json
+    set_project_mcp_servers(claude_dir, enabled_servers)
+
+    # Execute and capture output
+    try:
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            cwd=claude_dir,
+            check=False,
+        )
+        return result
+    except FileNotFoundError:
+        return subprocess.CompletedProcess(
+            args=cmd,
+            returncode=1,
+            stdout="",
+            stderr="Error: 'claude' command not found. Is Claude Code installed?",
+        )
